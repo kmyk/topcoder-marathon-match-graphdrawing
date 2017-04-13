@@ -13,9 +13,9 @@ visualize: tester.jar a.out
 	    | grep -v '^[0-9]\+ [0-9]\+\.[0-9]\+ [0-9]\+\.[0-9]\+$$' \
 	    | grep -v '^[0-9]\+ - ([0-9]\+,[0-9]\+)$$'
 
-benchmark: tester.jar a.out
-	for i in `seq 100` ; do java -jar tester.jar -exec ./a.out -seed `bash -c 'echo $$RANDOM'` ; done \
+score: tester.jar a.out
+	for i in `seq 10` ; do java -jar tester.jar -exec ./a.out -seed `bash -c 'echo $$RANDOM'` ; done \
 	    | tee /dev/stderr \
 	    | grep Score \
-	    | awk '{ sum += $$3 } END { print sum / NR }'
+	    | awk '{ sum += $$3; } END { printf("%f\n", sum / NR * 1000000); }'
 
