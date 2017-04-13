@@ -1,5 +1,4 @@
 #pragma GCC optimize "O3"
-#pragma GCC target "avx"
 #include <iostream>
 #include <cstdio>
 #include <vector>
