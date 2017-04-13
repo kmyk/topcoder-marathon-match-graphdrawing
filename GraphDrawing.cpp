@@ -27,6 +27,7 @@ template <class T> inline void setmax(T & a, T const & b) { a = max(a, b); }
 template <class T> inline void setmin(T & a, T const & b) { a = min(a, b); }
 int sq(int x) { return x * x; }
 int clamp(int a, int l, int r) { return min(max(a, l), r); } // [l, r]
+constexpr double eps = 1e-10;
 
 class GraphDrawing { public: vector<int> plot(int, vector<int>); };
 
@@ -47,39 +48,54 @@ constexpr int length_max = 991; // inclusive
 constexpr int position_min = 0;
 constexpr int position_max = 700; // inclusive
 
-double calculate_score(vector<point_t> const & p, vector<edge_t> const & edges) {
+pair<double, double> calculate_updated_ratio_squared(vector<point_t> const & p, int i, point_t p_i, vector<edge_t> const & edges, vector<vector<int> > const & g) { // O(deg(i))
     double min_ratio_squared = + INFINITY;
     double max_ratio_squared = - INFINITY;
-    for (auto e : edges) {
-        double ratio_squared = dist_squared(p[e.from], p[e.to]) /(double) sq(e.dist);
-        setmin(min_ratio_squared, ratio_squared);
-        setmax(max_ratio_squared, ratio_squared);
+    for (int eid : g[i]) {
+        auto e = edges[eid];
+        int j = e.to != i ? e.to : e.from;
+        setmin(min_ratio_squared, dist_squared(p_i, p[j]) /(double) sq(e.dist));
+        setmax(max_ratio_squared, dist_squared(p_i, p[j]) /(double) sq(e.dist));
     }
-    return sqrt(min_ratio_squared / max_ratio_squared);
+    return { min_ratio_squared, max_ratio_squared };
 }
 
-pair<int, int> find_bounding_edges(vector<point_t> const & p, vector<edge_t> const & edges) {
+pair<int, int> find_bounding_edges(vector<point_t> const & p, vector<edge_t> const & edges) { // O(E)
     double min_ratio_squared = + INFINITY;
     double max_ratio_squared = - INFINITY;
-    int min_edge = -1;
-    int max_edge = -1;
+    int min_eid = -1;
+    int max_eid = -1;
     repeat (i, edges.size()) {
         auto e = edges[i];
         double ratio_squared = dist_squared(p[e.from], p[e.to]) /(double) sq(e.dist);
         if (ratio_squared < min_ratio_squared) {
             min_ratio_squared = ratio_squared;
-            min_edge = i;
+            min_eid = i;
         }
         if (max_ratio_squared < ratio_squared) {
             max_ratio_squared = ratio_squared;
-            max_edge = i;
+            max_eid = i;
         }
     }
-    return { min_edge, max_edge };
+    return { min_eid, max_eid };
+}
+
+double calculate_ratio_squared(int eid, vector<point_t> const & p, vector<edge_t> const & edges) { // O(1)
+    edge_t e = edges[eid];
+    return dist_squared(p[e.from], p[e.to]) /(double) sq(e.dist);
+}
+double calculate_score(int min_eid, int max_eid, vector<point_t> const & p, vector<edge_t> const & edges) { // O(1)
+    double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
+    double max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
+    return sqrt(min_ratio_squared / max_ratio_squared);
+}
+double calculate_score(vector<point_t> const & p, vector<edge_t> const & edges) { // O(E)
+    int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
+    return calculate_score(min_eid, max_eid, p, edges);
 }
 
 template <class T>
-bool is_distinct(vector<T> data) {
+bool is_distinct(vector<T> data) { // O(N log N)
     whole(sort, data);
     return whole(unique, data) == data.end();
 }
@@ -96,48 +112,60 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         g[e.to  ].push_back(i);
         g[e.from].push_back(i);
     }
-    // initialize positions
+    // positions
     vector<point_t> p;
-    double score = - INFINITY;
-    for (int iteration = 0; iteration < 100; ++ iteration) {
-        vector<point_t> q(n);
-        repeat (i,n) {
-            uniform_int_distribution<int> dist(0, 700);
-            q[i].y = dist(gen);
-            q[i].x = dist(gen);
+    { // initialize positions
+        double score = - INFINITY;
+        int iteration = 0;
+        for (; iteration < 100; ++ iteration) {
+            vector<point_t> q(n);
+            repeat (i,n) {
+                uniform_int_distribution<int> dist(0, 700);
+                q[i].y = dist(gen);
+                q[i].x = dist(gen);
+            }
+            double next_score = calculate_score(q, edges);
+            if (score < next_score) {
+                score = next_score;
+                p = q;
+                cerr << "[*] init " << iteration << ": updated " << score << endl;
+            }
         }
-        double next_score = calculate_score(q, edges);
-        if (score < next_score) {
-            score = next_score;
-            p = q;
-            cerr << "[*] " << iteration << ": updated " << score << endl;
-        }
+        cerr << "[+] " << iteration << " iterations for initialization" << endl;
     }
-    // hill climbing
-    for (int iteration = 0; ; ++ iteration) {
-        if (iteration % 256 == 0) {
-            chrono::high_resolution_clock::time_point clock_end = chrono::high_resolution_clock::now();
-            int elapsed = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_begin).count();
-            if (elapsed >= 9000) break;
+    { // hill climbing
+        int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
+        double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
+        double max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
+        int iteration = 0;
+        for (; ; ++ iteration) {
+            if (iteration % 256 == 0) {
+                chrono::high_resolution_clock::time_point clock_end = chrono::high_resolution_clock::now();
+                int elapsed = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_begin).count();
+                if (elapsed >= 9000) break;
+            }
+            int choice = uniform_int_distribution<int>(0, 3)(gen);
+            int i =
+                choice == 0 ? edges[min_eid].from :
+                choice == 1 ? edges[min_eid].to :
+                choice == 2 ? edges[max_eid].from :
+                choice == 3 ? edges[max_eid].to :
+                -1;
+            point_t updated_p_i;
+            uniform_int_distribution<int> dist(- 200, + 200);
+            updated_p_i.y = clamp(p[i].y + dist(gen), position_min, position_max);
+            updated_p_i.x = clamp(p[i].x + dist(gen), position_min, position_max);
+            double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
+            if (min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared) {
+                p[i] = updated_p_i;
+                tie(min_eid, max_eid) = find_bounding_edges(p, edges);
+                min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
+                max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
+                // double score = sqrt(min_ratio_squared / max_ratio_squared);
+                // cerr << "[*] hill " << iteration << ": updated " << score << endl;
+            }
         }
-        int min_edge, max_edge; tie(min_edge, max_edge) = find_bounding_edges(p, edges);
-        int choice = uniform_int_distribution<int>(0, 3)(gen);
-        int i =
-            choice == 0 ? edges[min_edge].from :
-            choice == 1 ? edges[min_edge].to :
-            choice == 2 ? edges[max_edge].from :
-                          edges[max_edge].to ;
-        point_t saved_p_i = p[i];
-        uniform_int_distribution<int> dist(- 200, + 200);
-        p[i].y = clamp(p[i].y + dist(gen), position_min, position_max);
-        p[i].x = clamp(p[i].x + dist(gen), position_min, position_max);
-        double updated_score = calculate_score(p, edges);
-        if (score < updated_score) {
-            score = updated_score;
-            // cerr << "[*] " << iteration << ": updated " << score << endl;
-        } else {
-            p[i] = saved_p_i;
-        }
+        cerr << "[+] " << iteration << " iterations for hill climbing" << endl;
     }
     // assert distinct
     set<point_t> used;
