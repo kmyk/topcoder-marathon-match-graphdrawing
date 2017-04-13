@@ -33,7 +33,7 @@ constexpr double eps = 1e-10;
 class GraphDrawing { public: vector<int> plot(int, vector<int>); };
 
 double rdtsc() { // in seconds
-    constexpr double ticks_per_sec = 2500000000;
+    constexpr double ticks_per_sec = 25000000000;
     uint32_t lo, hi;
     asm volatile ("rdtsc" : "=a" (lo), "=d" (hi));
     return ((uint64_t)hi << 32 | lo) / ticks_per_sec;
@@ -149,7 +149,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         for (; ; ++ iteration) {
             if (iteration % 256 == 0) {
                 double clock_end = rdtsc();
-                if (clock_end - clock_begin >= 0.9) break;
+                if (clock_end - clock_begin >= 0.95) break;
             }
             int choice = uniform_int_distribution<int>(0, 6)(gen);
             int i =
