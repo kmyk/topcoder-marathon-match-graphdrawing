@@ -156,11 +156,18 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
             double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
             if (min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared) {
                 p[i] = updated_p_i;
-                tie(min_eid, max_eid) = find_bounding_edges(p, edges);
-                min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
-                max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
-                // double score = sqrt(min_ratio_squared / max_ratio_squared);
-                // cerr << "[*] hill " << iteration << ": updated " << score << endl;
+                bool can_update_score = choice < 4;
+                bool is_max = choice & 2;
+                if (can_update_score and (is_max ? updated_max_ratio_squared + eps < max_ratio_squared : min_ratio_squared + eps < updated_min_ratio_squared)) {
+                    double prev_score = sqrt(min_ratio_squared / max_ratio_squared);
+                    tie(min_eid, max_eid) = find_bounding_edges(p, edges);
+                    min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
+                    max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
+                    double score = sqrt(min_ratio_squared / max_ratio_squared);
+                    if (prev_score + eps < score) {
+                        cerr << "[*] hill " << iteration << ": updated " << score << endl;
+                    }
+                }
             }
         }
         cerr << "[+] " << iteration << " iterations for hill climbing" << endl;
