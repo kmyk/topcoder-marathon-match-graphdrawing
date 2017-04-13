@@ -144,17 +144,16 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                 int elapsed = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_begin).count();
                 if (elapsed >= 9000) break;
             }
-            int choice = uniform_int_distribution<int>(0, 3)(gen);
+            int choice = uniform_int_distribution<int>(0, 6)(gen);
             int i =
                 choice == 0 ? edges[min_eid].from :
                 choice == 1 ? edges[min_eid].to :
                 choice == 2 ? edges[max_eid].from :
                 choice == 3 ? edges[max_eid].to :
-                -1;
+                uniform_int_distribution<int>(0, n-1)(gen);
             point_t updated_p_i;
-            uniform_int_distribution<int> dist(- 200, + 200);
-            updated_p_i.y = clamp(p[i].y + dist(gen), position_min, position_max);
-            updated_p_i.x = clamp(p[i].x + dist(gen), position_min, position_max);
+            updated_p_i.y = uniform_int_distribution<int>(position_min, position_max)(gen);
+            updated_p_i.x = uniform_int_distribution<int>(position_min, position_max)(gen);
             double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
             if (min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared) {
                 p[i] = updated_p_i;
