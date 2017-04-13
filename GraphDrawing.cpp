@@ -12,7 +12,6 @@
 #include <unordered_map>
 #include <functional>
 #include <random>
-#include <chrono>
 #include <cassert>
 #define repeat(i,n) for (int i = 0; (i) < int(n); ++(i))
 #define repeat_from(i,m,n) for (int i = (m); (i) < int(n); ++(i))
@@ -32,6 +31,13 @@ int clamp(int a, int l, int r) { return min(max(a, l), r); } // [l, r]
 constexpr double eps = 1e-10;
 
 class GraphDrawing { public: vector<int> plot(int, vector<int>); };
+
+double rdtsc() { // in seconds
+    constexpr double ticks_per_sec = 2500000000;
+    uint32_t lo, hi;
+    asm volatile ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((uint64_t)hi << 32 | lo) / ticks_per_sec;
+}
 
 struct point_t {
     int y, x;
@@ -106,7 +112,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
     // prepare
     random_device device;
     default_random_engine gen(device());
-    chrono::high_resolution_clock::time_point clock_begin = chrono::high_resolution_clock::now();
+    double clock_begin = rdtsc();
     // make graph
     vector<vector<int> > g(n);
     repeat (i, edges.size()) {
@@ -142,9 +148,8 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         int iteration = 0;
         for (; ; ++ iteration) {
             if (iteration % 256 == 0) {
-                chrono::high_resolution_clock::time_point clock_end = chrono::high_resolution_clock::now();
-                int elapsed = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_begin).count();
-                if (elapsed >= 9000) break;
+                double clock_end = rdtsc();
+                if (clock_end - clock_begin >= 0.9) break;
             }
             int choice = uniform_int_distribution<int>(0, 6)(gen);
             int i =
