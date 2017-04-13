@@ -20,6 +20,9 @@
 #define repeat_from_reverse(i,m,n) for (int i = (n)-1; (i) >= int(m); --(i))
 #define whole(f,x,...) ([&](decltype((x)) whole) { return (f)(begin(whole), end(whole), ## __VA_ARGS__); })(x)
 #define debug(x) #x << " = " << (x) << " "
+#ifndef LOCAL
+#define cerr if (false) cerr
+#endif
 using ll = long long;
 using namespace std;
 template <class T> inline void setmax(T & a, T const & b) { a = max(a, b); }

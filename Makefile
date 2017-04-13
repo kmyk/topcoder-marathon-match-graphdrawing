@@ -2,7 +2,7 @@
 
 build: a.out
 a.out: GraphDrawing.cpp
-	g++ -std=c++11 -Wall -O2 $^
+	g++ -std=c++11 -Wall -O2 -DLOCAL $^
 
 RANDOM = $(shell bash -c 'echo $$RANDOM')
 SEED ?= ${RANDOM}
