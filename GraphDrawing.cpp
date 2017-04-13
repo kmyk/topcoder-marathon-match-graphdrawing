@@ -97,17 +97,29 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         g[e.from].push_back(i);
     }
     // initialize positions
-    vector<point_t> p(n);
-    repeat (i,n) {
-        uniform_int_distribution<int> dist(0, 700);
-        p[i].y = dist(gen);
-        p[i].x = dist(gen);
+    vector<point_t> p;
+    double score = - INFINITY;
+    for (int iteration = 0; iteration < 100; ++ iteration) {
+        vector<point_t> q(n);
+        repeat (i,n) {
+            uniform_int_distribution<int> dist(0, 700);
+            q[i].y = dist(gen);
+            q[i].x = dist(gen);
+        }
+        double next_score = calculate_score(q, edges);
+        if (score < next_score) {
+            score = next_score;
+            p = q;
+            cerr << "[*] " << iteration << ": updated " << score << endl;
+        }
     }
     // hill climbing
-    double score = calculate_score(p, edges);
-    while (true) {
-        chrono::high_resolution_clock::time_point clock_end = chrono::high_resolution_clock::now();
-        if (chrono::duration_cast<chrono::milliseconds>(clock_end - clock_begin).count() >= 9000) break;
+    for (int iteration = 0; ; ++ iteration) {
+        if (iteration % 256 == 0) {
+            chrono::high_resolution_clock::time_point clock_end = chrono::high_resolution_clock::now();
+            int elapsed = chrono::duration_cast<chrono::milliseconds>(clock_end - clock_begin).count();
+            if (elapsed >= 9000) break;
+        }
         int min_edge, max_edge; tie(min_edge, max_edge) = find_bounding_edges(p, edges);
         int choice = uniform_int_distribution<int>(0, 3)(gen);
         int i =
@@ -116,13 +128,13 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
             choice == 2 ? edges[max_edge].from :
                           edges[max_edge].to ;
         point_t saved_p_i = p[i];
-        uniform_int_distribution<int> dist(-100, 100);
+        uniform_int_distribution<int> dist(- 200, + 200);
         p[i].y = clamp(p[i].y + dist(gen), position_min, position_max);
         p[i].x = clamp(p[i].x + dist(gen), position_min, position_max);
         double updated_score = calculate_score(p, edges);
         if (score < updated_score) {
             score = updated_score;
-            // cerr << "updated " << score << endl;
+            // cerr << "[*] " << iteration << ": updated " << score << endl;
         } else {
             p[i] = saved_p_i;
         }
