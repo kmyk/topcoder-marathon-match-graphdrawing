@@ -26,11 +26,9 @@ using ll = long long;
 using namespace std;
 template <class T> inline void setmax(T & a, T const & b) { a = max(a, b); }
 template <class T> inline void setmin(T & a, T const & b) { a = min(a, b); }
-int sq(int x) { return x * x; }
-int clamp(int a, int l, int r) { return min(max(a, l), r); } // [l, r]
+template <class T> T sq(T x) { return x * x; }
+template <class T> T clamp(T a, T l, T r) { return min(max(a, l), r); } // [l, r]
 constexpr double eps = 1e-10;
-
-class GraphDrawing { public: vector<int> plot(int, vector<int>); };
 
 double rdtsc() { // in seconds
     constexpr double ticks_per_sec = 2500000000;
@@ -38,6 +36,8 @@ double rdtsc() { // in seconds
     asm volatile ("rdtsc" : "=a" (lo), "=d" (hi));
     return ((uint64_t)hi << 32 | lo) / ticks_per_sec;
 }
+
+class GraphDrawing { public: vector<int> plot(int, vector<int>); };
 
 struct point_t {
     int y, x;
@@ -50,18 +50,38 @@ struct edge_t {
     int from, to;
     int dist;
 };
+int opposite(int i, edge_t e) {
+    return i != e.to ? e.to : e.from;
+}
 
 constexpr int length_min = 1;
 constexpr int length_max = 991; // inclusive
 constexpr int position_min = 0;
 constexpr int position_max = 700; // inclusive
 
+template <class Generator>
+int random_walk(int base, int delta, Generator & gen) {
+    uniform_int_distribution<int> dist(- delta, + delta);
+    return clamp(base + dist(gen), position_min, position_max);
+}
+template <class Generator>
+int random_adjacent(int i, vector<edge_t> const & edges, vector<vector<int> > const & g, Generator & gen) {
+    int k = uniform_int_distribution<int>(0, g[i].size()-1)(gen);
+    int eid = g[i][k];
+    int j = opposite(i, edges[eid]);
+    return j;
+}
+template <class Generator>
+int random_position(Generator & gen) {
+    return uniform_int_distribution<int>(position_min, position_max)(gen);
+}
+
 pair<double, double> calculate_updated_ratio_squared(vector<point_t> const & p, int i, point_t p_i, vector<edge_t> const & edges, vector<vector<int> > const & g) { // O(deg(i))
     double min_ratio_squared = + INFINITY;
     double max_ratio_squared = - INFINITY;
     for (int eid : g[i]) {
         auto e = edges[eid];
-        int j = e.to != i ? e.to : e.from;
+        int j = opposite(i, e);
         setmin(min_ratio_squared, dist_squared(p_i, p[j]) /(double) sq(e.dist));
         setmax(max_ratio_squared, dist_squared(p_i, p[j]) /(double) sq(e.dist));
     }
@@ -108,39 +128,61 @@ bool is_distinct(vector<T> data) { // O(N log N)
     return whole(unique, data) == data.end();
 }
 
-vector<point_t> solve(int n, vector<edge_t> & edges) {
-    // prepare
-    random_device device;
-    default_random_engine gen(device());
-    double clock_begin = rdtsc();
-    // make graph
+vector<vector<int> > make_adjacent_list_from_edges(int n, vector<edge_t> & edges) {
     vector<vector<int> > g(n);
     repeat (i, edges.size()) {
         auto e = edges[i];
         g[e.to  ].push_back(i);
         g[e.from].push_back(i);
     }
-    // positions
+    return g;
+}
+
+template <class Generator>
+vector<point_t> compute_good_initial_positions(int iteration_count, int n, vector<edge_t> & edges, Generator & gen) {
     vector<point_t> p;
-    { // initialize positions
-        double score = - INFINITY;
-        int iteration = 0;
-        for (; iteration < 100; ++ iteration) {
-            vector<point_t> q(n);
-            repeat (i,n) {
-                uniform_int_distribution<int> dist(0, 700);
-                q[i].y = dist(gen);
-                q[i].x = dist(gen);
-            }
-            double next_score = calculate_score(q, edges);
-            if (score < next_score) {
-                score = next_score;
-                p = q;
-                cerr << "[*] init " << iteration << ": updated " << score << endl;
-            }
+    double score = - INFINITY;
+    int iteration = 0;
+    for (; iteration < 100; ++ iteration) {
+        vector<point_t> q(n);
+        repeat (i,n) {
+            uniform_int_distribution<int> dist(0, 700);
+            q[i].y = dist(gen);
+            q[i].x = dist(gen);
         }
-        cerr << "[+] " << iteration << " iterations for initialization" << endl;
+        double next_score = calculate_score(q, edges);
+        if (score < next_score) {
+            score = next_score;
+            p = q;
+            cerr << "[*] init " << iteration << ": updated " << score << endl;
+        }
     }
+    cerr << "[+] " << iteration << " iterations for initialization" << endl;
+    return p;
+}
+
+template <class Generator>
+vector<point_t> make_positions_distinct(vector<point_t> p, Generator & gen) {
+    int n = p.size();
+    set<point_t> used;
+    repeat (i,n) {
+        while (used.count(p[i])) {
+            p[i].y = random_walk(p[i].y, 1, gen); // may decreases the score
+            p[i].x = random_walk(p[i].x, 1, gen);
+        }
+        used.insert(p[i]);
+    }
+    return p;
+}
+
+vector<point_t> solve(int n, vector<edge_t> & edges) {
+    // prepare
+    random_device device;
+    default_random_engine gen(device());
+    double clock_begin = rdtsc();
+    // pre
+    vector<vector<int> > g = make_adjacent_list_from_edges(n, edges);
+    vector<point_t> p = compute_good_initial_positions(100, n, edges, gen);
     { // hill climbing
         int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
         double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
@@ -154,13 +196,13 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
             int choice = uniform_int_distribution<int>(0, 6)(gen);
             int i =
                 choice == 0 ? edges[min_eid].from :
-                choice == 1 ? edges[min_eid].to :
+                choice == 1 ? edges[min_eid].to   :
                 choice == 2 ? edges[max_eid].from :
-                choice == 3 ? edges[max_eid].to :
+                choice == 3 ? edges[max_eid].to   :
                 uniform_int_distribution<int>(0, n-1)(gen);
             point_t updated_p_i;
-            updated_p_i.y = uniform_int_distribution<int>(position_min, position_max)(gen);
-            updated_p_i.x = uniform_int_distribution<int>(position_min, position_max)(gen);
+            updated_p_i.y = random_position(gen);
+            updated_p_i.x = random_position(gen);
             double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
             if (min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared) {
                 p[i] = updated_p_i;
@@ -180,16 +222,8 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         }
         cerr << "[+] " << iteration << " iterations for hill climbing" << endl;
     }
-    // assert distinct
-    set<point_t> used;
-    repeat (i,n) {
-        while (used.count(p[i])) {
-            uniform_int_distribution<int> dist(-1, 1);
-            p[i].y = clamp(p[i].y + dist(gen), position_min, position_max);
-            p[i].x = clamp(p[i].x + dist(gen), position_min, position_max);
-        }
-        used.insert(p[i]);
-    }
+    // post
+    p = make_positions_distinct(p, gen);
     return p;
 }
 
