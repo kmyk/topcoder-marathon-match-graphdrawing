@@ -143,7 +143,7 @@ vector<point_t> compute_good_initial_positions(int iteration_count, int n, vecto
     vector<point_t> p;
     double score = - INFINITY;
     int iteration = 0;
-    for (; iteration < 100; ++ iteration) {
+    for (; iteration < iteration_count; ++ iteration) {
         vector<point_t> q(n);
         repeat (i,n) {
             uniform_int_distribution<int> dist(0, 700);

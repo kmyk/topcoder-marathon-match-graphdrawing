@@ -7,7 +7,7 @@ RANDOM = $(shell bash -c 'echo $$RANDOM')
 SEED ?= ${RANDOM}
 SEED := ${SEED}
 visualize:
-	${CXX} ${CXXFLAGS} -DLOCAL GraphDrawing.cpp
+	${CXX} ${CXXFLAGS} -g -DLOCAL GraphDrawing.cpp
 	java -jar tester.jar -exec ./a.out -seed ${SEED} -vis -debug \
 	    | grep -v '^[0-9]\+-[0-9]\+ = [0-9]\+ (dist [0-9]\+\.[0-9]\+)$$' \
 	    | grep -v '^[0-9]\+ [0-9]\+\.[0-9]\+ [0-9]\+\.[0-9]\+$$' \
