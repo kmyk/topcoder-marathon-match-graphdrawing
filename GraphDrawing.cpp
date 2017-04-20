@@ -204,12 +204,16 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
             if (t > time_limit) break;
         }
         // change
-        int choice = uniform_int_distribution<int>(0, 6)(gen);
+        int choice = uniform_int_distribution<int>(0, 10-1)(gen);
         int i =
             choice == 0 ? edges[min_eid].from :
             choice == 1 ? edges[min_eid].to   :
             choice == 2 ? edges[max_eid].from :
             choice == 3 ? edges[max_eid].to   :
+            choice == 4 ? random_adjacent(edges[min_eid].from, edges, g, gen) :
+            choice == 5 ? random_adjacent(edges[min_eid].to,   edges, g, gen) :
+            choice == 6 ? random_adjacent(edges[max_eid].from, edges, g, gen) :
+            choice == 7 ? random_adjacent(edges[max_eid].to,   edges, g, gen) :
             uniform_int_distribution<int>(0, n-1)(gen);
         point_t saved_p_i = p[i];
         if (t < 2.0) {
