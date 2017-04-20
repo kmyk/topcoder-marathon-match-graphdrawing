@@ -187,11 +187,13 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
         double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
         double max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
+        int t = -1;
         int iteration = 0;
         for (; ; ++ iteration) {
-            if (iteration % 256 == 0) {
+            if (iteration % 65536 == 0) {
                 double clock_end = rdtsc();
                 if (clock_end - clock_begin >= 9.5) break;
+                t = clock_end - clock_begin;
             }
             int choice = uniform_int_distribution<int>(0, 6)(gen);
             int i =
@@ -201,8 +203,13 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                 choice == 3 ? edges[max_eid].to   :
                 uniform_int_distribution<int>(0, n-1)(gen);
             point_t updated_p_i;
-            updated_p_i.y = random_position(gen);
-            updated_p_i.x = random_position(gen);
+            if (t < 3) {
+                updated_p_i.y = random_position(gen);
+                updated_p_i.x = random_position(gen);
+            } else {
+                updated_p_i.y = random_walk(p[i].y, 1, gen);
+                updated_p_i.x = random_walk(p[i].x, 1, gen);
+            }
             double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
             if (min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared) {
                 p[i] = updated_p_i;
