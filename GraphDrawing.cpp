@@ -184,8 +184,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
     vector<vector<int> > g = make_adjacent_list_from_edges(n, edges);
     vector<point_t> p = compute_good_initial_positions(100, n, edges, gen);
     { // simulated annealing
-        constexpr double break_time = 9.5; // sec
-        constexpr double write_time = 8.0; // sec
+        constexpr double time_limit = 9.5; // sec
         double highscore_squared = - INFINITY;
         vector<point_t> best_p;
         int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
@@ -197,11 +196,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
             if (iteration % 8192 == 0) {
                 double clock_end = rdtsc();
                 t = clock_end - clock_begin;
-                if (t > break_time) break;
-                if (best_p.empty() and t > write_time) {
-                    highscore_squared = - INFINITY;
-                    best_p = p;
-                }
+                if (t > time_limit) break;
             }
             int choice = uniform_int_distribution<int>(0, 6)(gen);
             int i =
@@ -211,9 +206,15 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                 choice == 3 ? edges[max_eid].to   :
                 uniform_int_distribution<int>(0, n-1)(gen);
             point_t updated_p_i;
-            if (t < 3.0) {
+            if (t < 2.0) {
                 updated_p_i.y = random_position(gen);
                 updated_p_i.x = random_position(gen);
+            } else if (t < 4.0) {
+                updated_p_i.y = random_walk(p[i].y, 16, gen);
+                updated_p_i.x = random_walk(p[i].x, 16, gen);
+            } else if (t < 7.0) {
+                updated_p_i.y = random_walk(p[i].y, 6, gen);
+                updated_p_i.x = random_walk(p[i].x, 6, gen);
             } else {
                 updated_p_i.y = random_walk(p[i].y, 1, gen);
                 updated_p_i.x = random_walk(p[i].x, 1, gen);
@@ -231,7 +232,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                     double score_squared = min_ratio_squared / max_ratio_squared;
                     if (highscore_squared + eps < score_squared) {
                         highscore_squared = score_squared;
-                        if (t > write_time) best_p = p;
+                        best_p = p;
                         cerr << "[*] " << iteration << " " << t << "s : score " << sqrt(score_squared) << endl;
                     }
                 }
