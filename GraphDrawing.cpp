@@ -172,15 +172,42 @@ vector<point_t> compute_good_initial_positions(int iteration_count, int n, vecto
 }
 
 template <class Generator>
-vector<point_t> make_positions_distinct(vector<point_t> p, Generator & gen) {
+vector<point_t> make_positions_distinct(vector<point_t> p, vector<edge_t> const & edges, Generator & gen) {
+    double original_score = calculate_score(p, edges);
     int n = p.size();
+    vector<double> absolute_ratio_squared(edges.size());
+    repeat (eid, edges.size()) {
+        double ratio_squared = calculate_ratio_squared(eid, p, edges);
+        absolute_ratio_squared[eid] = ratio_squared >= 1 ? ratio_squared : 1 / ratio_squared;
+    }
+    vector<int> eids(edges.size());
+    whole(iota, eids, 0);
+    whole(sort, eids, [&](int i, int j) { return absolute_ratio_squared[i] < absolute_ratio_squared[j]; });
+    whole(reverse, eids);
     set<point_t> used;
-    repeat (i,n) {
-        while (used.count(p[i])) {
-            p[i].y = random_walk(p[i].y, 1, gen); // may decreases the score
-            p[i].x = random_walk(p[i].x, 1, gen);
+    vector<bool> fixed(n);
+    for (int eid : eids) {
+        edge_t e = edges[eid];
+        for (int i : { e.to, e.from }) {
+            if (fixed[i]) continue;
+            fixed[i] = true;
+            while (used.count(p[i])) { // may decreases the score
+                repeat (iteration, 5) {
+                    point_t q = p[i];
+                    q.y = random_walk(q.y, 1, gen);
+                    q.x = random_walk(q.x, 1, gen);
+                    if (not used.count(q)) {
+                        p[i] = q;
+                        break;
+                    }
+                }
+            }
+            used.insert(p[i]);
         }
-        used.insert(p[i]);
+    }
+    double updated_score = calculate_score(p, edges);
+    if (updated_score + eps < original_score) {
+        cerr << "[!] score decreased for distinctness: " << original_score << " -> " << updated_score << endl;
     }
     return p;
 }
@@ -255,7 +282,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         p = best_p;
     }
     // post
-    p = make_positions_distinct(p, gen);
+    p = make_positions_distinct(p, edges, gen);
     return p;
 }
 
