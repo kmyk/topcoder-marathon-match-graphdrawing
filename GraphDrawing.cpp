@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <set>
 #include <map>
 #include <queue>
@@ -155,10 +156,14 @@ vector<point_t> compute_good_initial_positions(int iteration_count, int n, vecto
     int iteration = 0;
     for (; iteration < iteration_count; ++ iteration) {
         vector<point_t> q(n);
+        array<bitset<position_max+1>, position_max+1> used = {}; // result must be distinct
         repeat (i,n) {
-            uniform_int_distribution<int> dist(0, 700);
-            q[i].y = dist(gen);
-            q[i].x = dist(gen);
+            do {
+                uniform_int_distribution<int> dist(0, 700);
+                q[i].y = dist(gen);
+                q[i].x = dist(gen);
+            } while (used[q[i].y][q[i].x]);
+            used[q[i].y][q[i].x] = true;
         }
         double next_score = calculate_score(q, edges);
         if (score < next_score) {
@@ -171,119 +176,88 @@ vector<point_t> compute_good_initial_positions(int iteration_count, int n, vecto
     return p;
 }
 
-template <class Generator>
-vector<point_t> make_positions_distinct(vector<point_t> p, vector<edge_t> const & edges, Generator & gen) {
-    double original_score = calculate_score(p, edges);
-    int n = p.size();
-    vector<double> absolute_ratio_squared(edges.size());
-    repeat (eid, edges.size()) {
-        double ratio_squared = calculate_ratio_squared(eid, p, edges);
-        absolute_ratio_squared[eid] = ratio_squared >= 1 ? ratio_squared : 1 / ratio_squared;
-    }
-    vector<int> eids(edges.size());
-    whole(iota, eids, 0);
-    whole(sort, eids, [&](int i, int j) { return absolute_ratio_squared[i] < absolute_ratio_squared[j]; });
-    whole(reverse, eids);
-    set<point_t> used;
-    vector<bool> fixed(n);
-    for (int eid : eids) {
-        edge_t e = edges[eid];
-        for (int i : { e.to, e.from }) {
-            if (fixed[i]) continue;
-            fixed[i] = true;
-            for (int dist = 1; used.count(p[i]); ++ dist) { // may decreases the score
-                repeat (iteration, int(sqrt(dist))) {
-                    point_t q = p[i];
-                    q.y = random_walk(q.y, 1, gen);
-                    q.x = random_walk(q.x, 1, gen);
-                    if (not used.count(q)) {
-                        p[i] = q;
-                        break;
-                    }
-                }
-            }
-            used.insert(p[i]);
-        }
-    }
-    double updated_score = calculate_score(p, edges);
-    if (updated_score + eps < original_score) {
-        cerr << "[!] score decreased for distinctness: " << original_score << " -> " << updated_score << endl;
-    }
-    return p;
-}
-
 vector<point_t> solve(int n, vector<edge_t> & edges) {
     // prepare
     random_device device;
     default_random_engine gen(device());
     double clock_begin = rdtsc();
-    // pre
+
+    // data
     vector<vector<int> > g = make_adjacent_list_from_edges(n, edges);
     vector<point_t> p = compute_good_initial_positions(100, n, edges, gen);
-    { // simulated annealing
-        constexpr double time_limit = 9.5; // sec
-        double highscore_squared = - INFINITY;
-        vector<point_t> best_p;
-        int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
-        double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
-        double max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
-        double t = -1;
-        int iteration = 0;
-        for (; ; ++ iteration) {
-            if (iteration % 8192 == 0) {
-                double clock_end = rdtsc();
-                t = clock_end - clock_begin;
-                if (t > time_limit) break;
-            }
-            int choice = uniform_int_distribution<int>(0, 6)(gen);
-            int i =
-                choice == 0 ? edges[min_eid].from :
-                choice == 1 ? edges[min_eid].to   :
-                choice == 2 ? edges[max_eid].from :
-                choice == 3 ? edges[max_eid].to   :
-                uniform_int_distribution<int>(0, n-1)(gen);
-            point_t saved_p_i = p[i];
-            if (t < 2.0) {
-                p[i].y = random_position(gen);
-                p[i].x = random_position(gen);
-            } else if (t < 4.0) {
-                p[i].y = random_walk(p[i].y, 16, gen);
-                p[i].x = random_walk(p[i].x, 16, gen);
-            } else if (t < 7.0) {
-                p[i].y = random_walk(p[i].y, 6, gen);
-                p[i].x = random_walk(p[i].x, 6, gen);
-            } else {
-                p[i].y = random_walk(p[i].y, 1, gen);
-                p[i].x = random_walk(p[i].x, 1, gen);
-            }
-            double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_ratio_squared_around(i, p, edges, g);
-            bool acceptable = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
-            bool force_accepted = not acceptable and bernoulli_distribution((10-t) * 0.00001)(gen);
-            if (acceptable or force_accepted) {
-                bool can_update_score = choice < 4;
-                bool is_max = choice & 2;
-                bool score_increased = can_update_score and (is_max ? updated_max_ratio_squared + eps < max_ratio_squared : min_ratio_squared + eps < updated_min_ratio_squared);
-                if (force_accepted or score_increased) {
-                    tie(min_eid, max_eid) = find_bounding_edges(p, edges);
-                    min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
-                    max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
-                    double score_squared = min_ratio_squared / max_ratio_squared;
-                    if (highscore_squared + eps < score_squared) {
-                        highscore_squared = score_squared;
-                        best_p = p;
-                        cerr << "[*] " << iteration << " " << t << "s : score " << sqrt(score_squared) << endl;
-                    }
-                }
-            } else {
-                p[i] = saved_p_i;
-            }
+    array<bitset<position_max+1>, position_max+1> used = {};
+    repeat (i,n) used[p[i].y][p[i].x] = true;
+
+    // simulated annealing
+    constexpr double time_limit = 9.5; // sec
+    double highscore_squared = - INFINITY;
+    vector<point_t> best_p;
+    int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
+    double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
+    double max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
+    double t = -1;
+    int iteration = 0;
+    for (; ; ++ iteration) {
+        if (iteration % 8192 == 0) {
+            double clock_end = rdtsc();
+            t = clock_end - clock_begin;
+            if (t > time_limit) break;
         }
-        cerr << "[+] " << iteration << " iterations for simulated annealing" << endl;
-        p = best_p;
+        // change
+        int choice = uniform_int_distribution<int>(0, 6)(gen);
+        int i =
+            choice == 0 ? edges[min_eid].from :
+            choice == 1 ? edges[min_eid].to   :
+            choice == 2 ? edges[max_eid].from :
+            choice == 3 ? edges[max_eid].to   :
+            uniform_int_distribution<int>(0, n-1)(gen);
+        point_t saved_p_i = p[i];
+        if (t < 2.0) {
+            p[i].y = random_position(gen);
+            p[i].x = random_position(gen);
+        } else if (t < 4.0) {
+            p[i].y = random_walk(p[i].y, 16, gen);
+            p[i].x = random_walk(p[i].x, 16, gen);
+        } else if (t < 7.0) {
+            p[i].y = random_walk(p[i].y, 6, gen);
+            p[i].x = random_walk(p[i].x, 6, gen);
+        } else {
+            p[i].y = random_walk(p[i].y, 1, gen);
+            p[i].x = random_walk(p[i].x, 1, gen);
+        }
+        do {
+            p[i].y = random_walk(p[i].y, 1, gen);
+            p[i].x = random_walk(p[i].x, 1, gen);
+        } while (used[p[i].y][p[i].x]);
+        // evaluate
+        double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_ratio_squared_around(i, p, edges, g);
+        bool acceptable = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
+        bool force_accepted = not acceptable and bernoulli_distribution((10-t) * 0.00001)(gen);
+        if (acceptable or force_accepted) {
+            used[saved_p_i.y][saved_p_i.x] = false;
+            used[p[i].y][p[i].x] = true;
+            bool can_update_score = choice < 4;
+            bool is_max = choice & 2;
+            bool score_increased = can_update_score and (is_max ? updated_max_ratio_squared + eps < max_ratio_squared : min_ratio_squared + eps < updated_min_ratio_squared);
+            if (force_accepted or score_increased) {
+                tie(min_eid, max_eid) = find_bounding_edges(p, edges);
+                min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
+                max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
+                double score_squared = min_ratio_squared / max_ratio_squared;
+                if (highscore_squared + eps < score_squared) {
+                    highscore_squared = score_squared;
+                    best_p = p;
+                    cerr << "[*] " << iteration << " " << t << "s : score " << sqrt(score_squared) << endl;
+                }
+            }
+        } else {
+            p[i] = saved_p_i;
+        }
     }
-    // post
-    p = make_positions_distinct(p, edges, gen);
-    return p;
+
+    // done
+    cerr << "[+] " << iteration << " iterations for simulated annealing" << endl;
+    return best_p;
 }
 
 vector<int> GraphDrawing::plot(int n, vector<int> edges) {
