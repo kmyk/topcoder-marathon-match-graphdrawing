@@ -183,10 +183,10 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
     // pre
     vector<vector<int> > g = make_adjacent_list_from_edges(n, edges);
     vector<point_t> p = compute_good_initial_positions(100, n, edges, gen);
-    { // hill climbing
+    { // simulated annealing
         constexpr double break_time = 9.5; // sec
         constexpr double write_time = 8.0; // sec
-        double highscore = - INFINITY;
+        double highscore_squared = - INFINITY;
         vector<point_t> best_p;
         int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
         double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
@@ -194,12 +194,12 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         double t = -1;
         int iteration = 0;
         for (; ; ++ iteration) {
-            if (iteration % 65536 == 0) {
+            if (iteration % 8192 == 0) {
                 double clock_end = rdtsc();
                 t = clock_end - clock_begin;
                 if (t > break_time) break;
                 if (best_p.empty() and t > write_time) {
-                    highscore = - INFINITY;
+                    highscore_squared = - INFINITY;
                     best_p = p;
                 }
             }
@@ -220,7 +220,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
             }
             double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
             bool acceptable = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
-            if (acceptable or bernoulli_distribution((10-t) * 0.00001)(gen)) {
+            if (acceptable or bernoulli_distribution((10-t)/10 * 0.0001)(gen)) {
                 p[i] = updated_p_i;
                 bool can_update_score = choice < 4;
                 bool is_max = choice & 2;
@@ -228,16 +228,16 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                     tie(min_eid, max_eid) = find_bounding_edges(p, edges);
                     min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
                     max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
-                    double score = sqrt(min_ratio_squared / max_ratio_squared);
-                    if (highscore + eps < score) {
-                        highscore = score;
+                    double score_squared = min_ratio_squared / max_ratio_squared;
+                    if (highscore_squared + eps < score_squared) {
+                        highscore_squared = score_squared;
                         if (t > write_time) best_p = p;
-                        cerr << "[*] " << iteration << " " << t << "s : score " << score << endl;
+                        cerr << "[*] " << iteration << " " << t << "s : score " << sqrt(score_squared) << endl;
                     }
                 }
             }
         }
-        cerr << "[+] " << iteration << " iterations for hill climbing" << endl;
+        cerr << "[+] " << iteration << " iterations for simulated annealing" << endl;
         p = best_p;
     }
     // post
