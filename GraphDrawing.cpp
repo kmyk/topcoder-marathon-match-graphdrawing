@@ -154,7 +154,7 @@ vector<point_t> compute_good_initial_positions(int iteration_count, int n, vecto
         if (score < next_score) {
             score = next_score;
             p = q;
-            cerr << "[*] init " << iteration << ": updated " << score << endl;
+            cerr << "[*] init " << iteration << ": score " << score << endl;
         }
     }
     cerr << "[+] " << iteration << " iterations for initialization" << endl;
@@ -184,16 +184,24 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
     vector<vector<int> > g = make_adjacent_list_from_edges(n, edges);
     vector<point_t> p = compute_good_initial_positions(100, n, edges, gen);
     { // hill climbing
+        constexpr double break_time = 9.5; // sec
+        constexpr double write_time = 8.0; // sec
+        double highscore = - INFINITY;
+        vector<point_t> best_p;
         int min_eid, max_eid; tie(min_eid, max_eid) = find_bounding_edges(p, edges);
         double min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
         double max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
-        int t = -1;
+        double t = -1;
         int iteration = 0;
         for (; ; ++ iteration) {
             if (iteration % 65536 == 0) {
                 double clock_end = rdtsc();
-                if (clock_end - clock_begin >= 9.5) break;
                 t = clock_end - clock_begin;
+                if (t > break_time) break;
+                if (best_p.empty() and t > write_time) {
+                    highscore = - INFINITY;
+                    best_p = p;
+                }
             }
             int choice = uniform_int_distribution<int>(0, 6)(gen);
             int i =
@@ -203,7 +211,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                 choice == 3 ? edges[max_eid].to   :
                 uniform_int_distribution<int>(0, n-1)(gen);
             point_t updated_p_i;
-            if (t < 3) {
+            if (t < 3.0) {
                 updated_p_i.y = random_position(gen);
                 updated_p_i.x = random_position(gen);
             } else {
@@ -211,23 +219,26 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                 updated_p_i.x = random_walk(p[i].x, 1, gen);
             }
             double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
-            if (min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared) {
+            bool acceptable = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
+            if (acceptable or bernoulli_distribution(0.0001)(gen)) {
                 p[i] = updated_p_i;
                 bool can_update_score = choice < 4;
                 bool is_max = choice & 2;
                 if (can_update_score and (is_max ? updated_max_ratio_squared + eps < max_ratio_squared : min_ratio_squared + eps < updated_min_ratio_squared)) {
-                    double prev_score = sqrt(min_ratio_squared / max_ratio_squared);
                     tie(min_eid, max_eid) = find_bounding_edges(p, edges);
                     min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
                     max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
                     double score = sqrt(min_ratio_squared / max_ratio_squared);
-                    if (prev_score + eps < score) {
-                        cerr << "[*] hill " << iteration << ": updated " << score << endl;
+                    if (highscore + eps < score) {
+                        highscore = score;
+                        if (t > write_time) best_p = p;
+                        cerr << "[*] " << iteration << ": score " << score << endl;
                     }
                 }
             }
         }
         cerr << "[+] " << iteration << " iterations for hill climbing" << endl;
+        p = best_p;
     }
     // post
     p = make_positions_distinct(p, gen);
