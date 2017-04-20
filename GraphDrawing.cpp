@@ -76,6 +76,16 @@ int random_position(Generator & gen) {
     return uniform_int_distribution<int>(position_min, position_max)(gen);
 }
 
+pair<double, double> calculate_ratio_squared_around(int i, vector<point_t> const & p, vector<edge_t> const & edges, vector<vector<int> > const & g) { // O(deg(i))
+    double min_ratio_squared = + INFINITY;
+    double max_ratio_squared = - INFINITY;
+    for (int eid : g[i]) {
+        auto e = edges[eid];
+        setmin(min_ratio_squared, dist_squared(p[e.from], p[e.to]) /(double) sq(e.dist));
+        setmax(max_ratio_squared, dist_squared(p[e.from], p[e.to]) /(double) sq(e.dist));
+    }
+    return { min_ratio_squared, max_ratio_squared };
+}
 pair<double, double> calculate_updated_ratio_squared(vector<point_t> const & p, int i, point_t p_i, vector<edge_t> const & edges, vector<vector<int> > const & g) { // O(deg(i))
     double min_ratio_squared = + INFINITY;
     double max_ratio_squared = - INFINITY;
@@ -205,27 +215,28 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                 choice == 2 ? edges[max_eid].from :
                 choice == 3 ? edges[max_eid].to   :
                 uniform_int_distribution<int>(0, n-1)(gen);
-            point_t updated_p_i;
+            point_t saved_p_i = p[i];
             if (t < 2.0) {
-                updated_p_i.y = random_position(gen);
-                updated_p_i.x = random_position(gen);
+                p[i].y = random_position(gen);
+                p[i].x = random_position(gen);
             } else if (t < 4.0) {
-                updated_p_i.y = random_walk(p[i].y, 16, gen);
-                updated_p_i.x = random_walk(p[i].x, 16, gen);
+                p[i].y = random_walk(p[i].y, 16, gen);
+                p[i].x = random_walk(p[i].x, 16, gen);
             } else if (t < 7.0) {
-                updated_p_i.y = random_walk(p[i].y, 6, gen);
-                updated_p_i.x = random_walk(p[i].x, 6, gen);
+                p[i].y = random_walk(p[i].y, 6, gen);
+                p[i].x = random_walk(p[i].x, 6, gen);
             } else {
-                updated_p_i.y = random_walk(p[i].y, 1, gen);
-                updated_p_i.x = random_walk(p[i].x, 1, gen);
+                p[i].y = random_walk(p[i].y, 1, gen);
+                p[i].x = random_walk(p[i].x, 1, gen);
             }
-            double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
+            double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_ratio_squared_around(i, p, edges, g);
             bool acceptable = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
-            if (acceptable or bernoulli_distribution((10-t)/10 * 0.0001)(gen)) {
-                p[i] = updated_p_i;
+            bool force_accepted = not acceptable and bernoulli_distribution((10-t) * 0.00001)(gen);
+            if (acceptable or force_accepted) {
                 bool can_update_score = choice < 4;
                 bool is_max = choice & 2;
-                if (can_update_score and (is_max ? updated_max_ratio_squared + eps < max_ratio_squared : min_ratio_squared + eps < updated_min_ratio_squared)) {
+                bool score_increased = can_update_score and (is_max ? updated_max_ratio_squared + eps < max_ratio_squared : min_ratio_squared + eps < updated_min_ratio_squared);
+                if (force_accepted or score_increased) {
                     tie(min_eid, max_eid) = find_bounding_edges(p, edges);
                     min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
                     max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
@@ -236,6 +247,8 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                         cerr << "[*] " << iteration << " " << t << "s : score " << sqrt(score_squared) << endl;
                     }
                 }
+            } else {
+                p[i] = saved_p_i;
             }
         }
         cerr << "[+] " << iteration << " iterations for simulated annealing" << endl;
