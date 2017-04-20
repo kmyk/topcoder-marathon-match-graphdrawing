@@ -231,14 +231,16 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
         } while (used[p[i].y][p[i].x]);
         // evaluate
         double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_ratio_squared_around(i, p, edges, g);
-        bool acceptable = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
-        bool force_accepted = not acceptable and bernoulli_distribution((10-t) * 0.00001)(gen);
-        if (acceptable or force_accepted) {
+        bool score_preserved = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
+        bool force_accepted = not score_preserved and bernoulli_distribution((10-t) * 0.00001)(gen);
+        if (score_preserved or force_accepted) {
             used[saved_p_i.y][saved_p_i.x] = false;
             used[p[i].y][p[i].x] = true;
-            bool can_update_score = choice < 4;
-            bool is_max = choice & 2;
-            bool score_increased = can_update_score and (is_max ? updated_max_ratio_squared + eps < max_ratio_squared : min_ratio_squared + eps < updated_min_ratio_squared);
+            bool is_min = i == edges[min_eid].from or i == edges[min_eid].to;
+            bool is_max = i == edges[max_eid].from or i == edges[max_eid].to;
+            bool score_increased = not force_accepted and (
+                    (is_max and updated_max_ratio_squared + eps < max_ratio_squared) or
+                    (is_min and min_ratio_squared + eps < updated_min_ratio_squared) );
             if (force_accepted or score_increased) {
                 tie(min_eid, max_eid) = find_bounding_edges(p, edges);
                 min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
