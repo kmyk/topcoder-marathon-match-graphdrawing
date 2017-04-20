@@ -220,7 +220,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
             }
             double updated_min_ratio_squared, updated_max_ratio_squared; tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_updated_ratio_squared(p, i, updated_p_i, edges, g);
             bool acceptable = min_ratio_squared < eps + updated_min_ratio_squared and updated_max_ratio_squared < eps + max_ratio_squared;
-            if (acceptable or bernoulli_distribution(0.0001)(gen)) {
+            if (acceptable or bernoulli_distribution((10-t) * 0.00001)(gen)) {
                 p[i] = updated_p_i;
                 bool can_update_score = choice < 4;
                 bool is_max = choice & 2;
@@ -232,7 +232,7 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
                     if (highscore + eps < score) {
                         highscore = score;
                         if (t > write_time) best_p = p;
-                        cerr << "[*] " << iteration << ": score " << score << endl;
+                        cerr << "[*] " << iteration << " " << t << "s : score " << score << endl;
                     }
                 }
             }
