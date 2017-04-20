@@ -191,8 +191,8 @@ vector<point_t> make_positions_distinct(vector<point_t> p, vector<edge_t> const 
         for (int i : { e.to, e.from }) {
             if (fixed[i]) continue;
             fixed[i] = true;
-            while (used.count(p[i])) { // may decreases the score
-                repeat (iteration, 5) {
+            for (int dist = 1; used.count(p[i]); ++ dist) { // may decreases the score
+                repeat (iteration, int(sqrt(dist))) {
                     point_t q = p[i];
                     q.y = random_walk(q.y, 1, gen);
                     q.x = random_walk(q.x, 1, gen);
