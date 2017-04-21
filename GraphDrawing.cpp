@@ -277,51 +277,62 @@ vector<point_t> solve(int n, vector<edge_t> & edges) {
     };
 
     // first
-    for (; check_time(8.0); ++ iteration) {
-        // change
-        int choice = uniform_int_distribution<int>(0, 10-1)(gen);
-        int i =
-            choice == 0 ? edges[min_eid].from :
-            choice == 1 ? edges[min_eid].to   :
-            choice == 2 ? edges[max_eid].from :
-            choice == 3 ? edges[max_eid].to   :
-            choice == 4 ? random_adjacent(edges[min_eid].from, edges, g, gen) :
-            choice == 5 ? random_adjacent(edges[min_eid].to,   edges, g, gen) :
-            choice == 6 ? random_adjacent(edges[max_eid].from, edges, g, gen) :
-            choice == 7 ? random_adjacent(edges[max_eid].to,   edges, g, gen) :
-            uniform_int_distribution<int>(0, n-1)(gen);
-        point_t saved_p_i = p[i];
-        if (t < 2.0 and iteration & 1) {
-            p[i].y = random_position(gen);
-            p[i].x = random_position(gen);
-        } else if (t < 4.0) {
-            p[i].y = random_walk(p[i].y, 16, gen);
-            p[i].x = random_walk(p[i].x, 16, gen);
-        } else {
-            p[i].y = random_walk(p[i].y, 4, gen);
-            p[i].x = random_walk(p[i].x, 4, gen);
-        }
-        // evaluate
-        tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_ratio_squared_around(i, p, edges, g);
-        bool score_preserved = is_score_preserved();
-        bool force_accepted = not score_preserved and bernoulli_distribution((10-t) * 0.00001)(gen);
-        if (score_preserved or force_accepted) {
-            if (force_accepted or is_score_increased(i)) {
-                tie(min_eid, max_eid) = find_bounding_edges(p, edges);
-                min_ratio_squared = calculate_ratio_squared(min_eid, p, edges);
-                max_ratio_squared = calculate_ratio_squared(max_eid, p, edges);
-                double score_squared = min_ratio_squared / max_ratio_squared;
-                if (highscore_squared + eps < score_squared) {
-                    highscore_squared = score_squared;
-                    best_p = p;
-                    cerr << "[*] " << iteration << " " << t << "s : score " << sqrt(score_squared) << endl;
-                }
+    {
+        vector<double> ratio_squared(edges.size());
+        repeat (i, edges.size()) ratio_squared[i] = calculate_ratio_squared(i, p, edges);
+        vector<int> edges_sorted(edges.size());
+        whole(iota, edges_sorted, 0);
+        for (; check_time(8.0); ++ iteration) {
+            if (iteration % 256 == 0) {
+                whole(sort, edges_sorted, [&](int i, int j) { return ratio_squared[i] < ratio_squared[j]; });
             }
-        } else {
-            p[i] = saved_p_i;
+            // change
+            int i; {
+                int choice = uniform_int_distribution<int>(0, 7-1)(gen);
+                int eid_rank =
+                    choice == 0 ? uniform_int_distribution<int>(0,                min(4,   int(edges.size()))-1)(gen) :
+                    choice == 1 ? uniform_int_distribution<int>(0,                min(40,  int(edges.size()))-1)(gen) :
+                    choice == 2 ? uniform_int_distribution<int>(0,                min(400, int(edges.size()))-1)(gen) :
+                    choice == 3 ? uniform_int_distribution<int>(max(0, int(edges.size()) -   4), edges.size()-1)(gen) :
+                    choice == 4 ? uniform_int_distribution<int>(max(0, int(edges.size()) -  40), edges.size()-1)(gen) :
+                    choice == 5 ? uniform_int_distribution<int>(max(0, int(edges.size()) - 400), edges.size()-1)(gen) :
+                    uniform_int_distribution<int>(0, edges.size()-1)(gen);
+                edge_t e = edges[edges_sorted[eid_rank]];
+                i = uniform_int_distribution<int>(0, 1)(gen) ? e.from : e.to;
+            }
+            point_t saved_p_i = p[i];
+            if ((t < 2.0 and (iteration & 0x1) == 0) or (iteration & 0xf) == 0) {
+                p[i].y = random_position(gen);
+                p[i].x = random_position(gen);
+            } else {
+                p[i].y = random_walk(p[i].y, 16, gen);
+                p[i].x = random_walk(p[i].x, 16, gen);
+            }
+            // evaluate
+            tie(updated_min_ratio_squared, updated_max_ratio_squared) = calculate_ratio_squared_around(i, p, edges, g);
+            bool score_preserved = is_score_preserved();
+            bool force_accepted = not score_preserved and bernoulli_distribution((10-t) * 0.00001)(gen);
+            if (score_preserved or force_accepted) {
+                for (int eid : g[i]) ratio_squared[eid] = calculate_ratio_squared(eid, p, edges);
+                if (force_accepted or is_score_increased(i)) {
+                    whole(sort, edges_sorted, [&](int i, int j) { return ratio_squared[i] < ratio_squared[j]; });
+                    min_eid = edges_sorted.front();
+                    max_eid = edges_sorted.back();
+                    min_ratio_squared = ratio_squared[min_eid];
+                    max_ratio_squared = ratio_squared[max_eid];
+                    double score_squared = min_ratio_squared / max_ratio_squared;
+                    if (highscore_squared + eps < score_squared) {
+                        highscore_squared = score_squared;
+                        best_p = p;
+                        cerr << "[*] " << iteration << " " << t << "s : score " << sqrt(score_squared) << endl;
+                    }
+                }
+            } else {
+                p[i] = saved_p_i;
+            }
         }
+        cerr << "[*] done: score " << sqrt(highscore_squared) << endl;
     }
-    cerr << "[*] done: score " << sqrt(highscore_squared) << endl;
 
     // second
     p = best_p;
